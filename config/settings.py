@@ -1,6 +1,9 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import streamlit as st
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 
 
@@ -30,6 +33,13 @@ def obter_config(chave: str, valor_padrao: str = "") -> str:
 
 # Caminho da credencial do Firebase Admin
 FIREBASE_CREDENTIALS_PATH = obter_config("FIREBASE_CREDENTIALS_PATH", "serviceAccountKey.json")
+
+if not firebase_admin._apps:
+    firebase_config = dict(st.secrets["firebase_service_account"])
+    cred = credentials.Certificate(firebase_config)
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
 
 # Nomes padronizados das coleções no Cloud Firestore
 COLECAO_USUARIOS = "usuarios"
