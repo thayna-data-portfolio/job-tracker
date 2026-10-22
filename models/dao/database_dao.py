@@ -74,3 +74,7 @@ class DatabaseDAO:
             .limit(limite)
         )
         return [doc.to_dict() for doc in query.stream()]
+
+    def ler_colecao(self, nome_colecao: str, limite: int = 100) -> Dict[str, Dict[str, Any]]:
+     docs = self.db.collection(nome_colecao).limit(limite).stream()
+     return {doc.id: doc.to_dict() for doc in docs}
