@@ -1,5 +1,6 @@
 import os
 import json
+import streamlit as st
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import firebase_admin
@@ -29,21 +30,47 @@ class DatabaseDAO:
     def _conectar_firestore(self):
         if not firebase_admin._apps:
             caminho_cred = Path(FIREBASE_CREDENTIALS_PATH)
-            if not caminho_cred.is_absolute():
-                caminho_cred = BASE_DIR / caminho_cred
 
-            if caminho_cred.exists():
-                cred = credentials.Certificate(str(caminho_cred))
-            elif os.getenv("FIREBASE_CREDENTIALS_JSON"):
-                cred_dict = json.loads(os.getenv("FIREBASE_CREDENTIALS_JSON"))
-                cred = credentials.Certificate(cred_dict)
-            else:
-                raise FileNotFoundError(
-                    f"Arquivo de credencial do Firebase não encontrado em: '{caminho_cred}'. "
-                    "Baixe o serviceAccountKey.json no console do Firebase e coloque na raiz do projeto."
+        if not caminho_cred.is_absolute():
+            caminho_cred = BASE_DIR / caminho_cred
+
+        cred = None
+
+        # 1. Credencial local: útil durante o desenvolvimento
+        if caminho_cred.exists():
+            cred = credentials.Certificate(str(caminho_cred))
+
+        # 2. Credencial armazenada em variável de ambiente
+        elif os.getenv("FIREBASE_CREDENTIALS_JSON"):
+            cred_dict = json.loads(
+                os.getenv("FIREBASE_CREDENTIALS_JSON")
+            )
+            cred = credentials.Certificate(cred_dict)
+
+        # 3. Secrets do Streamlit Cloud
+        else:
+            try:
+                firebase_config = st.secrets.get(
+                    "firebase_service_account"
                 )
 
-            firebase_admin.initialize_app(cred)
+                if firebase_config:
+                    cred = credentials.Certificate(
+                        dict(firebase_config)
+                    )
+
+            except Exception:
+                # Secrets podem não existir no ambiente local
+                pass
+
+        if cred is None:
+            raise FileNotFoundError(
+                "Credenciais do Firebase não encontradas. "
+                "Configure o serviceAccountKey.json localmente "
+                "ou os Secrets do Streamlit Cloud."
+            )
+
+        firebase_admin.initialize_app(cred)
 
         return firestore.client()
 
