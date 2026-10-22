@@ -72,7 +72,7 @@ class DatabaseDAO:
 
         firebase_admin.initialize_app(cred)
 
-        return firestore.client()
+        return firestore.client(database_id="job-tracker-db")
 
     def buscar_documento(self, nome_colecao: str, doc_id: str) -> Optional[Dict[str, Any]]:
         doc = self.db.collection(nome_colecao).document(str(doc_id)).get()
