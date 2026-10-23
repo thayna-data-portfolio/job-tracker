@@ -173,11 +173,19 @@ class DashboardView:
         st.markdown(f"## 📊 Dashboard do Cargo: **{resumo.titulo_exibicao}**")
 
         # Cálculo de Match do usuário com as Top 10 skills do cargo
-        top_skills_cargo = list(resumo.top_requisitos.keys())[:10]
-        skills_em_comum = [s for s in top_skills_cargo if s in usuario.skills_usuario]
-        skills_faltantes = [s for s in top_skills_cargo if s not in usuario.skills_usuario]
-        pct_match = int((len(skills_em_comum) / len(top_skills_cargo)) * 100) if top_skills_cargo else 0
+        requisitos_ordenados = sorted(
+            resumo.top_requisitos.items(),
+            key=lambda item: item[1],
+            reverse=True
+        )[:10]
 
+        top_skills_cargo = [skill for skill, _ in requisitos_ordenados]
+        skills_em_comum = [s for s in top_skills_cargo if s in usuario.skills_usuario]
+        skills_faltantes = [
+            (skill, qtd) for skill, qtd in requisitos_ordenados
+            if skill not in usuario.skills_usuario
+        ]
+        pct_match = int((len(skills_em_comum) / len(top_skills_cargo)) * 100) if top_skills_cargo else 0
         skill_mais_pedida = top_skills_cargo[0] if top_skills_cargo else "N/A"
         vagas_com_salario = len(resumo.salarios_identificados)
 
@@ -246,8 +254,7 @@ class DashboardView:
 
                     st.markdown("**📚 O que mais cai nas vagas e vale estudar:**")
                     if skills_faltantes:
-                        for idx, sk in enumerate(skills_faltantes, 1):
-                            qtd = resumo.top_requisitos.get(sk, 0)
+                        for idx, (sk, qtd) in enumerate(skills_faltantes, 1):
                             st.markdown(f"{idx}. **{sk}** *(pedida em {qtd} vagas)*")
                     else:
                         st.balloons()
