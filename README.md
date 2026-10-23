@@ -64,7 +64,7 @@ A estrutura segue uma organização inspirada no padrão MVC (*Model-View-Contro
 
 Você pode acessar o Job Tracker diretamente pelo navegador, sem precisar instalar Python ou configurar o ambiente local.
 
-**[Acessar o Job Tracker](https://job-tracker-axgd7kttydwpay4cqsfaye.streamlit.app/)**
+**[Acessar o Job Tracker](https://job-tracker-001.streamlit.app/)**
 
 ## ⚙️ Como executar o projeto localmente
 
