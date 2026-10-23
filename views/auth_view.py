@@ -1,5 +1,4 @@
 import streamlit as st
-from config.settings import DICIONARIO_SKILLS
 from controllers.auth_controller import AuthController
 
 
@@ -56,13 +55,6 @@ class AuthView:
                     email_cad = st.text_input("Seu E-mail", placeholder="seuemail@exemplo.com")
                     senha_cad = st.text_input("Crie uma Senha (mín. 6 caracteres)", type="password")
 
-                    lista_opcoes_skills = sorted(list(DICIONARIO_SKILLS.keys()))
-                    skills_iniciais = st.multiselect(
-                        "Quais qualificações/tecnologias você já conhece? (Opcional)",
-                        options=lista_opcoes_skills,
-                        help="Usaremos isso no Dashboard para mostrar o que você já tem e o que falta estudar para cada vaga."
-                    )
-
                     btn_cadastrar = st.form_submit_button("Criar Conta e Entrar", use_container_width=True, type="primary")
 
                     if btn_cadastrar:
@@ -71,7 +63,6 @@ class AuthView:
                                 nome=nome_cad,
                                 email=email_cad,
                                 senha=senha_cad,
-                                skills_iniciais=skills_iniciais
                             )
 
                         if resultado["sucesso"]:
