@@ -14,6 +14,8 @@ class Usuario:
         senha_hash: str,
         skills_usuario: List[str] = None,
         historico_buscas: List[str] = None,
+        vagas_salvas: Dict[str, List[Dict[str, Any]]] = None,
+        is_admin: bool = False,
         criado_em: str = None
     ):
         self.uid = uid
@@ -22,6 +24,8 @@ class Usuario:
         self.senha_hash = senha_hash
         self.skills_usuario = skills_usuario or []
         self.historico_buscas = historico_buscas or []
+        self.vagas_salvas = vagas_salvas or {}
+        self.is_admin = bool(is_admin)
         self.criado_em = criado_em or datetime.now().isoformat()
 
     def to_dict(self) -> Dict[str, Any]:
@@ -33,6 +37,8 @@ class Usuario:
             "senha_hash": self.senha_hash,
             "skills_usuario": self.skills_usuario,
             "historico_buscas": self.historico_buscas,
+            "vagas_salvas": self.vagas_salvas,
+            "is_admin": self.is_admin,
             "criado_em": self.criado_em
         }
 
@@ -46,5 +52,7 @@ class Usuario:
             senha_hash=dados.get("senha_hash", ""),
             skills_usuario=dados.get("skills_usuario", []),
             historico_buscas=dados.get("historico_buscas", []),
+            vagas_salvas=dados.get("vagas_salvas", {}),
+            is_admin=dados.get("is_admin", False),
             criado_em=dados.get("criado_em")
         )

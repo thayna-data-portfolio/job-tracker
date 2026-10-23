@@ -113,3 +113,19 @@ class VagaController:
     def listar_cargos_analisados(self) -> List[ResumoCargo]:
         """Retorna a lista de cargos já pesquisados e salvos no banco."""
         return self.vaga_dao.listar_todos_resumos()
+
+
+    # 5 Permite cadastro de novas skills 
+
+    def adicionar_skill_catalogo(self, nome: str, area: str, sinonimos_str: str) -> Dict[str, Any]:
+        nome = nome.strip()
+        if not nome:
+            return {"sucesso": False, "mensagem": "Informe o nome da qualificação."}
+
+        doc_id = self.extractor_service.gerar_slug_cargo(nome).replace("-", "_")
+        termos = [t.strip().lower() for t in sinonimos_str.split(",") if t.strip()]
+        if nome.lower() not in termos:
+            termos.insert(0, nome.lower())
+
+        self.vaga_dao.cadastrar_nova_skill(doc_id=doc_id, nome=nome, area=area or "Geral", termos=termos)
+        return {"sucesso": True, "mensagem": f"Qualificação '{nome}' salva no Firebase!"}

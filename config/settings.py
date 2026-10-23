@@ -56,3 +56,10 @@ PERIODO_HORAS_MAP = {
     "Última semana": 168,
     "Último mês": 720
 }
+
+# Lista de e-mails com permissão de Administrador
+EMAILS_ADMIN = [
+    email.strip().lower()
+    for email in os.getenv("EMAILS_ADMIN", "").split(",")
+    if email.strip()
+]

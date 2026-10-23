@@ -54,55 +54,34 @@ class VagaDAO:
 
     def obter_catalogo_skills(self) -> Dict[str, List[str]]:
         """
-        Busca o dicionário de qualificações diretamente da coleção 'catalogo_skills' no Firebase.
-        Se a coleção ainda não existir no Firestore, cria automaticamente com skills de várias áreas.
+        Lê todos os documentos da coleção 'catalogo_skills' direto do Firebase.
+        Aceita documentos criados tanto pelo sistema quanto manualmente no console do Firestore.
         """
-        documentos = self.db_dao.ler_colecao(COLECAO_SKILLS, limite=200)
+        documentos = self.db_dao.ler_colecao(COLECAO_SKILLS, limite=500)
+        catalogo = {}
 
-        if documentos:
-            catalogo = {}
-            for doc_id, dados in documentos.items():
-                nome_exibicao = dados.get("nome", doc_id)
-                sinonimos = dados.get("termos", [nome_exibicao.lower()])
-                catalogo[nome_exibicao] = sinonimos
-            return catalogo
+        for doc_id, dados in documentos.items():
+            nome_exibicao = dados.get("nome", doc_id).strip()
+            termos = dados.get("termos", [])
+            
+            # Se você inserir manualmente no Firebase como texto separado por vírgula, converte para lista
+            if isinstance(termos, str):
+                termos = [t.strip().lower() for t in termos.split(",") if t.strip()]
+            elif not termos:
+                termos = [nome_exibicao.lower()]
 
-        # Base inicial multi-áreas salva no Firestore apenas na 1ª execução
-        skills_iniciais_firestore = {
-            # Geral / Escritório / Idiomas
-            "excel": {"nome": "Excel / Planilhas", "area": "Geral", "termos": ["excel", "planilhas", "procv", "vlookup", "tabelas dinâmicas"]},
-            "pacote_office": {"nome": "Pacote Office", "area": "Geral", "termos": ["pacote office", "microsoft office", "word", "powerpoint", "office 365"]},
-            "ingles": {"nome": "Inglês", "area": "Idiomas", "termos": ["inglês", "ingles", "english"]},
-            "espanhol": {"nome": "Espanhol", "area": "Idiomas", "termos": ["espanhol", "spanish"]},
-            "comunicacao": {"nome": "Comunicação / Oratória", "area": "Soft Skill", "termos": ["boa comunicação", "comunicação verbal", "comunicação escrita", "oratória", "redação"]},
-            "metodologias_ageis": {"nome": "Metodologias Ágeis (Scrum/Kanban)", "area": "Gestão", "termos": ["scrum", "kanban", "agile", "metodologias ágeis", "jira"]},
+            catalogo[nome_exibicao] = termos
 
-            # Direito / Jurídico
-            "direito_civil": {"nome": "Direito Civil / Processual Civil", "area": "Jurídico", "termos": ["direito civil", "processo civil", "processual civil", "cpc", "código civil"]},
-            "direito_trabalhista": {"nome": "Direito Trabalhista", "area": "Jurídico", "termos": ["direito do trabalho", "trabalhista", "clt"]},
-            "direito_empresarial": {"nome": "Direito Empresarial / Societário", "area": "Jurídico", "termos": ["direito empresarial", "societário", "contratos", "análise de contratos"]},
-            "peticionamento": {"nome": "Elaboração de Peças / Peticionamento", "area": "Jurídico", "termos": ["peças processuais", "petições", "peticionamento", "pje", "esaj", "projudi", "acompanhamento processual"]},
-            "lgpd_compliance": {"nome": "LGPD / Compliance", "area": "Jurídico", "termos": ["lgpd", "compliance", "proteção de dados", "regulatório"]},
+        return catalogo
 
-            # Marketing / Comercial / Design
-            "marketing_digital": {"nome": "Marketing Digital / Redes Sociais", "area": "Marketing", "termos": ["marketing digital", "redes sociais", "social media", "instagram", "tiktok", "conteúdo"]},
-            "trafego_seo": {"nome": "Tráfego Pago / SEO / Google Ads", "area": "Marketing", "termos": ["google ads", "meta ads", "tráfego pago", "seo", "google analytics", "rd station", "crm"]},
-            "design_canva": {"nome": "Photoshop / Illustrator / Canva", "area": "Design", "termos": ["photoshop", "illustrator", "canva", "figma", "edição de vídeo", "capcut"]},
-
-            # Administração / Finanças / RH
-            "financeiro_erp": {"nome": "SAP / ERP / Rotinas Financeiras", "area": "Finanças", "termos": ["sap", "totvs", "protheus", "erp", "contas a pagar", "contas a receber", "fluxo de caixa", "conciliação"]},
-            "recrutamento_rh": {"nome": "Recrutamento & Seleção / DP", "area": "RH", "termos": ["recrutamento e seleção", "triagem de currículos", "departamento pessoal", "admissão", "folha de pagamento", "gupy"]},
-
-            # Tecnologia & Dados
-            "python": {"nome": "Python", "area": "Tecnologia", "termos": ["python"]},
-            "sql": {"nome": "SQL / Banco de Dados", "area": "Tecnologia", "termos": ["sql", "mysql", "postgresql", "oracle", "modelagem de dados"]},
-            "power_bi": {"nome": "Power BI / Dashboards", "area": "Dados", "termos": ["power bi", "powerbi", "tableau", "looker", "dax", "dashboards"]},
-            "java": {"nome": "Java", "area": "Tecnologia", "termos": [r"\bjava\b", "spring boot"]},
-            "javascript": {"nome": "JavaScript / TypeScript / React", "area": "Tecnologia", "termos": ["javascript", "typescript", "react", "node.js", "html", "css"]},
-            "git": {"nome": "Git / GitHub", "area": "Tecnologia", "termos": [r"\bgit\b", "github", "gitlab"]},
-            "cloud_docker": {"nome": "Cloud (AWS/Azure/GCP) & Docker", "area": "Tecnologia", "termos": ["aws", "azure", "google cloud", "gcp", "docker", "kubernetes"]},
-            "ciencia_dados": {"nome": "Pandas / Machine Learning / ETL", "area": "Dados", "termos": ["pandas", "etl", "machine learning", "scikit-learn", "databricks", "spark", "estatística"]}
-        }
-
-        self.db_dao.salvar_em_lote(COLECAO_SKILLS, skills_iniciais_firestore)
-        return {v["nome"]: v["termos"] for v in skills_iniciais_firestore.values()}
+    def cadastrar_nova_skill(self, doc_id: str, nome: str, area: str, termos: List[str]) -> None:
+        """Cadastra ou atualiza uma qualificação na coleção 'catalogo_skills' do Firebase."""
+        self.db_dao.salvar_documento(
+            nome_colecao=COLECAO_SKILLS,
+            doc_id=doc_id,
+            dados={
+                "nome": nome.strip(),
+                "area": area.strip(),
+                "termos": [t.strip().lower() for t in termos if t.strip()]
+            }
+        )

@@ -77,6 +77,31 @@ class DashboardView:
                     st.session_state["usuario_logado"] = usuario
                     st.toast("Suas qualificações foram atualizadas no Firebase!", icon="✅")
                     st.rerun()
+            
+
+            # Exibe o painel de cadastro de skills no banco APENAS se o usuário for Admin
+            if usuario.is_admin:
+                st.divider()
+                st.caption("🛡️ Painel do Administrador")
+                with st.expander("➕ Cadastrar Nova Qualificação"):
+                    nova_skill_nome = st.text_input("Nome da Qualificação", placeholder="Ex: Direito Tributário")
+                    nova_skill_area = st.text_input("Área / Catálogo", placeholder="Ex: Jurídico, Dados, Saúde...")
+                    nova_skill_termos = st.text_input(
+                        "Palavras-chave para detectar na vaga (separadas por vírgula)",
+                        placeholder="Ex: tributário, direito fiscal, icms"
+                    )
+                    if st.button("Adicionar ao Catálogo", use_container_width=True):
+                        res_skill = self.vaga_controller.adicionar_skill_catalogo(
+                            nome=nova_skill_nome,
+                            area=nova_skill_area,
+                            sinonimos_str=nova_skill_termos
+                        )
+                        if res_skill["sucesso"]:
+                            st.session_state.pop("opcoes_skills_banco", None)
+                            st.toast(res_skill["mensagem"], icon="✅")
+                            st.rerun()
+                        else:
+                            st.warning(res_skill["mensagem"])
 
 
     # ==========================================================

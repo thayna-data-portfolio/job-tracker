@@ -2,7 +2,7 @@ import hashlib
 from typing import Dict, Any, List
 from models.entities.usuario import Usuario
 from models.dao.usuario_dao import UsuarioDAO
-
+from config.settings import EMAILS_ADMIN
 
 class AuthController:
     """
@@ -51,7 +51,8 @@ class AuthController:
             nome=nome,
             email=email,
             senha_hash=self._gerar_hash_senha(senha),
-            skills_usuario=skills_iniciais or []
+            skills_usuario=skills_iniciais or [],
+            is_admin=(email in EMAILS_ADMIN)
         )
 
         self.usuario_dao.salvar(novo_usuario)
@@ -75,6 +76,10 @@ class AuthController:
         senha_hash_digitada = self._gerar_hash_senha(senha)
         if usuario.senha_hash != senha_hash_digitada:
             return {"sucesso": False, "mensagem": "Senha incorreta."}
+
+        if email in EMAILS_ADMIN and not usuario.is_admin:
+            usuario.is_admin = True
+            self.usuario_dao.salvar(usuario)
 
         return {
             "sucesso": True,
