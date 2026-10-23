@@ -37,3 +37,11 @@ class UsuarioDAO:
             dados={"skills_usuario": novas_skills}
         )
 
+    def atualizar_vagas_salvas(self, email: str, vagas_salvas: dict) -> None:
+        """Salva no Firestore o dicionário de categorias e vagas salvas pelo usuário."""
+        email_limpo = email.strip().lower()
+        self.db_dao.salvar_documento(
+            nome_colecao=COLECAO_USUARIOS,
+            doc_id=email_limpo,
+            dados={"vagas_salvas": vagas_salvas}
+        )

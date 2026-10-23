@@ -26,26 +26,32 @@ class DashboardView:
     def renderizar(self) -> None:
         usuario: Usuario = st.session_state["usuario_logado"]
 
-        # Inicializa estado do dashboard caso ainda esteja vazio
         if "resumo_atual" not in st.session_state:
             st.session_state["resumo_atual"] = None
             st.session_state["vagas_atuais"] = []
 
         self._renderizar_sidebar(usuario)
-        self._renderizar_barra_busca_linkedin(usuario)
 
-        st.divider()
+        aba_pesquisa, aba_salvas = st.tabs([
+            "🔎 Pesquisar Vagas no LinkedIn",
+            f"⭐ Minhas Vagas Salvas"
+        ])
 
-        if st.session_state["resumo_atual"] is not None:
-            self._renderizar_painel_analitico(
-                resumo=st.session_state["resumo_atual"],
-                vagas=st.session_state["vagas_atuais"],
-                usuario=usuario
-            )
-        else:
-            st.info(
-                "👆 Digite o **título da vaga** acima e clique em **Buscar Vagas no LinkedIn**"
-            )
+        with aba_pesquisa:
+            self._renderizar_barra_busca_linkedin(usuario)
+            st.divider()
+            if st.session_state["resumo_atual"] is not None:
+                self._renderizar_painel_analitico(
+                    resumo=st.session_state["resumo_atual"],
+                    vagas=st.session_state["vagas_atuais"],
+                    usuario=usuario,
+                    chave_contexto="pesquisa"
+                )
+            else:
+                st.info("👆 Digite o **título da vaga** acima, escolha os filtros e clique em **Buscar no LinkedIn**.")
+
+        with aba_salvas:
+            self._renderizar_aba_vagas_salvas(usuario)
 
     # ==========================================================
     # 1. BARRA LATERAL (PERFIL, SKILLS DO USUÁRIO E HISTÓRICO)
@@ -193,7 +199,9 @@ class DashboardView:
         self,
         resumo: ResumoCargo,
         vagas: List[Vaga],
-        usuario: Usuario
+        usuario: Usuario,
+        chave_contexto: str = "pesquisa",
+        categoria_atual: str = None
     ) -> None:
         st.markdown(f"## 📊 Dashboard do Cargo: **{resumo.titulo_exibicao}**")
 
@@ -223,16 +231,23 @@ class DashboardView:
 
         st.write("")
 
-        aba_requisitos, aba_rotina_salario, aba_vagas = st.tabs([
-            "🏆 Principais Qualificações Pedidas",
-            "🛠️ Dia a Dia & Salários",
-            f"📋 Vagas Encontradas ({len(vagas)})"
-        ])
+        secao_ativa = st.radio(
+            "Navegação do Painel:",
+            options=[
+                "🏆 Principais Qualificações Pedidas",
+                "🛠️ Dia a Dia & Salários",
+                "📋 Vagas Encontradas"
+            ],
+            horizontal=True,
+            label_visibility="collapsed",
+            key=f"nav_painel_{chave_contexto}"
+        )
+        st.divider()
 
         # ----------------------------------------------------------
         # ABA 1: RANKING DE QUALIFICAÇÕES E GAP DE ESTUDO
         # ----------------------------------------------------------
-        with aba_requisitos:
+        if secao_ativa == "🏆 Principais Qualificações Pedidas":
             if not resumo.top_requisitos:
                 st.info("As descrições coletadas para este cargo ainda não trouxeram qualificações mapeadas.")
             else:
@@ -265,7 +280,7 @@ class DashboardView:
                         }
                     )
                     fig.update_layout(height=450, yaxis_title="", xaxis_title="Número de Vagas")
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True, key=f"grafico_{chave_contexto}_{resumo.cargo_slug}")
 
                 with col_gap:
                     st.markdown("#### 🎯 Diagnóstico para o seu Perfil")
@@ -288,7 +303,7 @@ class DashboardView:
         # ----------------------------------------------------------
         # ABA 2: O QUE VAI FAZER NO DIA A DIA E SALÁRIOS
         # ----------------------------------------------------------
-        with aba_rotina_salario:
+        elif secao_ativa == "🛠️ Dia a Dia & Salários":
             col_dia, col_sal = st.columns([1.5, 1.2])
 
             with col_dia:
@@ -316,18 +331,20 @@ class DashboardView:
         # ----------------------------------------------------------
         # ABA 3: LISTA DE VAGAS COM LINK PARA INSCRIÇÃO
         # ----------------------------------------------------------
-        with aba_vagas:
+        elif secao_ativa == "📋 Vagas Encontradas":
             col_f1, col_f2 = st.columns(2)
             with col_f1:
                 filtro_modalidade = st.multiselect(
                     "Filtrar por Modalidade:",
                     options=["Remoto", "Híbrido", "Presencial / Não especificado"],
-                    default=[]
+                    default=[],
+                    key=f"mod_{chave_contexto}_{resumo.cargo_slug}"
                 )
             with col_f2:
                 filtro_skill = st.selectbox(
                     "Filtrar vagas que pedem a qualificação:",
-                    options=["Todas"] + list(resumo.top_requisitos.keys())
+                    options=["Todas"] + list(resumo.top_requisitos.keys()),
+                    key=f"sk_{chave_contexto}_{resumo.cargo_slug}"
                 )
 
             vagas_filtradas = vagas
@@ -365,6 +382,74 @@ class DashboardView:
                         if vaga.data_publicacao and vaga.data_publicacao != "None":
                             st.caption(f"📅 Publicada em: {vaga.data_publicacao}")
 
+                        if chave_contexto == "pesquisa":
+                            # Verifica se esta vaga já foi salva em alguma categoria do usuário
+                            categoria_ja_salva = next(
+                                (cat for cat, lista in usuario.vagas_salvas.items()
+                                 if any(v.get("id_vaga") == vaga.id_vaga for v in lista)),
+                                None
+                            )
+
+                            if categoria_ja_salva:
+                                # Como o popover não é mais renderizado aqui, o quadrado some na hora!
+                                st.button(
+                                    f"✅ Salva em: {categoria_ja_salva}",
+                                    key=f"ja_salva_{vaga.id_vaga}",
+                                    disabled=True,
+                                    use_container_width=True
+                                )
+                            else:
+                                with st.popover("⭐ Salvar Vaga", use_container_width=True):
+                                    categorias_existentes = list(usuario.vagas_salvas.keys())
+                                    cat_padrao = resumo.titulo_exibicao
+                                    if cat_padrao not in categorias_existentes:
+                                        categorias_existentes.insert(0, cat_padrao)
+
+                                    cat_escolhida = st.selectbox(
+                                        "Salvar na categoria:",
+                                        options=categorias_existentes + ["➕ Nova categoria..."],
+                                        key=f"sel_cat_{vaga.id_vaga}"
+                                    )
+                                    if cat_escolhida == "➕ Nova categoria...":
+                                        cat_final = st.text_input(
+                                            "Nome da nova categoria:",
+                                            placeholder="Ex: Prioridade Alta",
+                                            key=f"nova_cat_{vaga.id_vaga}"
+                                        )
+                                    else:
+                                        cat_final = cat_escolhida
+
+                                    if st.button("Confirmar", key=f"btn_save_{vaga.id_vaga}", type="primary", use_container_width=True):
+                                        res_save = self.vaga_controller.salvar_vaga_usuario(usuario, vaga, cat_final)
+                                        if res_save["sucesso"]:
+                                            st.session_state["usuario_logado"] = usuario
+                                            st.toast(res_save["mensagem"], icon="⭐")
+                                            st.rerun()
+                                        else:
+                                            st.warning(res_save["mensagem"])
+
+                        elif chave_contexto == "salvas" and categoria_atual:
+                            with st.popover("🗂️ Mudar Categoria", use_container_width=True):
+                                nova_cat = st.text_input(
+                                    "Mover para a categoria:",
+                                    value=categoria_atual,
+                                    key=f"move_in_{categoria_atual}_{vaga.id_vaga}"
+                                )
+                                if st.button("Mover Vaga", key=f"btn_mv_{categoria_atual}_{vaga.id_vaga}", use_container_width=True):
+                                    res_mv = self.vaga_controller.mover_vaga_categoria(
+                                        usuario, vaga.id_vaga, categoria_atual, nova_cat
+                                    )
+                                    if res_mv["sucesso"]:
+                                        st.session_state["usuario_logado"] = usuario
+                                        st.toast(res_mv["mensagem"], icon="🗂️")
+                                        st.rerun()
+
+                            if st.button("🗑️ Remover", key=f"del_{categoria_atual}_{vaga.id_vaga}", use_container_width=True):
+                                self.vaga_controller.remover_vaga_salva(usuario, vaga.id_vaga, categoria_atual)
+                                st.session_state["usuario_logado"] = usuario
+                                st.toast("Vaga removida!", icon="🗑️")
+                                st.rerun()
+
                     with st.expander("Ver atividades do dia a dia e descrição completa"):
                         if vaga.dia_a_dia:
                             st.markdown("**Principais atividades identificadas:**")
@@ -373,3 +458,77 @@ class DashboardView:
                             st.divider()
                         st.markdown("**Descrição original da vaga:**")
                         st.markdown(vaga.descricao_bruta or "Descrição não disponibilizada pelo anunciante.")
+
+    # ==========================================================
+    # 4. ABA DE VAGAS SALVAS E ANÁLISE POR CATEGORIA
+    # ==========================================================
+    def _renderizar_aba_vagas_salvas(self, usuario: Usuario) -> None:
+        total_salvas = sum(len(v) for v in usuario.vagas_salvas.values())
+        st.subheader(f"⭐ Minhas Vagas Salvas ({total_salvas})")
+
+        if not usuario.vagas_salvas:
+            st.info(
+                "Você ainda não salvou nenhuma vaga. Faça uma busca na aba **Pesquisar Vagas no LinkedIn** "
+                "e clique em **⭐ Salvar Vaga** nos cards que te interessarem!"
+            )
+            return
+
+        opcoes_categorias = {
+            f"📁 {nome_cat} ({len(lista)} vagas)": nome_cat
+            for nome_cat, lista in usuario.vagas_salvas.items()
+        }
+
+        opcoes_categorias = {
+            "⭐ Todas as vagas salvas": None,
+            **opcoes_categorias
+        }
+
+        col_sel, col_renomear = st.columns([2, 1.5])
+
+        with col_sel:
+            label_selecionado = st.selectbox(
+                "Escolha o agrupamento ou visualize todas as vagas:",
+                options=list(opcoes_categorias.keys())
+            )
+            categoria_ativa = opcoes_categorias[label_selecionado]
+    
+
+        with col_renomear:
+            if categoria_ativa is not None:
+                with st.expander("✏️ Renomear esta categoria"):
+                    novo_nome_grupo = st.text_input("Novo nome para o grupo:", value=categoria_ativa)
+                    if st.button("Salvar Novo Nome", use_container_width=True):
+                        novo_nome_limpo = novo_nome_grupo.strip()
+                        if novo_nome_limpo and novo_nome_limpo != categoria_ativa:
+                            vagas_do_grupo = usuario.vagas_salvas.pop(categoria_ativa)
+                            usuario.vagas_salvas.setdefault(novo_nome_limpo, []).extend(vagas_do_grupo)
+                            self.vaga_controller.usuario_dao.atualizar_vagas_salvas(usuario.email, usuario.vagas_salvas)
+                            st.session_state["usuario_logado"] = usuario
+                            st.rerun()
+
+        st.divider()
+
+        if categoria_ativa is None:
+            vagas_dicts = [
+                vaga
+                for lista in usuario.vagas_salvas.values()
+                for vaga in lista
+            ]
+            nome_analise = "Todas as vagas salvas"
+
+        else: 
+            vagas_dicts = usuario.vagas_salvas[categoria_ativa]
+            nome_analise = categoria_ativa
+
+        dados_analise = self.vaga_controller.gerar_analise_categoria_salva(
+            nome_categoria=nome_analise,
+            vagas_dicts=vagas_dicts
+        )
+
+        self._renderizar_painel_analitico(
+            resumo=dados_analise["resumo"],
+            vagas=dados_analise["vagas"],
+            usuario=usuario,
+            chave_contexto="salvas",
+            categoria_atual=categoria_ativa
+        )

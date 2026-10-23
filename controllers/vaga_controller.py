@@ -116,7 +116,6 @@ class VagaController:
 
 
     # 5 Permite cadastro de novas skills 
-
     def adicionar_skill_catalogo(self, nome: str, area: str, sinonimos_str: str) -> Dict[str, Any]:
         nome = nome.strip()
         if not nome:
@@ -129,3 +128,68 @@ class VagaController:
 
         self.vaga_dao.cadastrar_nova_skill(doc_id=doc_id, nome=nome, area=area or "Geral", termos=termos)
         return {"sucesso": True, "mensagem": f"Qualificação '{nome}' salva no Firebase!"}
+
+
+    def salvar_vaga_usuario(self, usuario, vaga, nome_categoria: str) -> Dict[str, Any]:
+        """Salva uma vaga dentro da categoria escolhida (padrão: título pesquisado)."""
+        categoria = nome_categoria.strip() or vaga.cargo_slug.replace("-", " ").title()
+
+        if categoria not in usuario.vagas_salvas:
+            usuario.vagas_salvas[categoria] = []
+
+        # Evita duplicar a mesma vaga dentro da mesma categoria
+        ids_existentes = [v.get("id_vaga") for v in usuario.vagas_salvas[categoria]]
+        if vaga.id_vaga in ids_existentes:
+            return {"sucesso": False, "mensagem": f"Esta vaga já está salva em '{categoria}'."}
+
+        usuario.vagas_salvas[categoria].append(vaga.to_dict())
+        self.usuario_dao.atualizar_vagas_salvas(usuario.email, usuario.vagas_salvas)
+        return {"sucesso": True, "mensagem": f"Vaga salva na categoria '{categoria}'!"}
+
+    def mover_vaga_categoria(self, usuario, id_vaga: str, cat_origem: str, cat_destino: str) -> Dict[str, Any]:
+        """Move uma vaga salva de uma categoria para outra categoria personalizada."""
+        cat_destino = cat_destino.strip()
+        if not cat_destino or cat_origem == cat_destino:
+            return {"sucesso": False, "mensagem": "Escolha um nome de categoria válido."}
+
+        lista_origem = usuario.vagas_salvas.get(cat_origem, [])
+        vaga_encontrada = next((v for v in lista_origem if v.get("id_vaga") == id_vaga), None)
+
+        if not vaga_encontrada:
+            return {"sucesso": False, "mensagem": "Vaga não encontrada na categoria de origem."}
+
+        # Remove da origem
+        usuario.vagas_salvas[cat_origem] = [v for v in lista_origem if v.get("id_vaga") != id_vaga]
+        if not usuario.vagas_salvas[cat_origem]:
+            del usuario.vagas_salvas[cat_origem]
+
+        # Adiciona no destino
+        if cat_destino not in usuario.vagas_salvas:
+            usuario.vagas_salvas[cat_destino] = []
+        if not any(v.get("id_vaga") == id_vaga for v in usuario.vagas_salvas[cat_destino]):
+            usuario.vagas_salvas[cat_destino].append(vaga_encontrada)
+
+        self.usuario_dao.atualizar_vagas_salvas(usuario.email, usuario.vagas_salvas)
+        return {"sucesso": True, "mensagem": f"Vaga movida para '{cat_destino}'!"}
+
+    def remover_vaga_salva(self, usuario, id_vaga: str, categoria: str) -> None:
+        """Remove uma vaga de uma categoria salva."""
+        if categoria in usuario.vagas_salvas:
+            usuario.vagas_salvas[categoria] = [
+                v for v in usuario.vagas_salvas[categoria] if v.get("id_vaga") != id_vaga
+            ]
+            if not usuario.vagas_salvas[categoria]:
+                del usuario.vagas_salvas[categoria]
+            self.usuario_dao.atualizar_vagas_salvas(usuario.email, usuario.vagas_salvas)
+
+    def gerar_analise_categoria_salva(self, nome_categoria: str, vagas_dicts: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Reconstrói os objetos Vaga e gera o ResumoCargo exclusivo daquela categoria salva."""
+        from models.entities.vaga import Vaga
+        objetos_vaga = [Vaga.from_dict(d) for d in vagas_dicts]
+        slug = self.extractor_service.gerar_slug_cargo(nome_categoria)
+        resumo = self.extractor_service.consolidar_resumo(
+            cargo_slug=slug,
+            titulo_exibicao=nome_categoria,
+            lista_vagas=objetos_vaga
+        )
+        return {"resumo": resumo, "vagas": objetos_vaga}
