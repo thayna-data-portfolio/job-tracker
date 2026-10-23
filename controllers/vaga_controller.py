@@ -82,22 +82,19 @@ class VagaController:
         # 3. Salva as vagas em lote no Firestore (fazendo merge por id_vaga)
         self.vaga_dao.salvar_vagas_em_lote(novas_vagas)
 
-        # 4. Busca todas as vagas acumuladas desse cargo no banco e atualiza o ResumoCargo
-        todas_vagas_do_cargo = self.vaga_dao.buscar_vagas_por_cargo(cargo_slug)
-        resumo_atualizado = self.extractor_service.consolidar_resumo(
+        # 4. Consolida o resumo APENAS com as vagas encontradas nesta pesquisa
+        resumo_atual = self.extractor_service.consolidar_resumo(
             cargo_slug=cargo_slug,
             titulo_exibicao=termo_limpo,
-            lista_vagas=todas_vagas_do_cargo
+            lista_vagas=vagas_filtradas
         )
-        self.vaga_dao.salvar_resumo_cargo(resumo_atualizado)
 
 
         return {
             "sucesso": True,
-            "aviso": None,
-            "resumo": resumo_atualizado,
-            "vagas": todas_vagas_do_cargo,
-            "novas_coletadas": len(novas_vagas)
+            "resumo": resumo_atual,
+            "vagas": vagas_filtradas,
+            "novas_coletadas": len(vagas_filtradas)
         }
 
     def carregar_cargo_do_banco(self, cargo_slug: str) -> Dict[str, Any]:
