@@ -37,12 +37,3 @@ class UsuarioDAO:
             dados={"skills_usuario": novas_skills}
         )
 
-    def registrar_busca_no_historico(self, email: str, cargo_slug: str) -> None:
-        """Adiciona o cargo pesquisado ao histórico do usuário sem repetir."""
-        usuario = self.buscar_por_email(email)
-        if usuario:
-            if cargo_slug not in usuario.historico_buscas:
-                usuario.historico_buscas.insert(0, cargo_slug)
-                # Mantém apenas as últimas 10 buscas
-                usuario.historico_buscas = usuario.historico_buscas[:10]
-                self.salvar(usuario)
