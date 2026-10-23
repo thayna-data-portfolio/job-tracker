@@ -28,15 +28,17 @@ class DatabaseDAO:
         self._inicializado = True
 
     def _conectar_firestore(self):
-        if not firebase_admin._apps:
-            caminho_cred = Path(FIREBASE_CREDENTIALS_PATH)
+        if firebase_admin._apps:
+            return firestore.client(database_id="job-tracker-db")
+
+        caminho_cred = Path(FIREBASE_CREDENTIALS_PATH)
 
         if not caminho_cred.is_absolute():
             caminho_cred = BASE_DIR / caminho_cred
 
         cred = None
 
-        # 1. Credencial local: útil durante o desenvolvimento
+        # 1. Credencial local
         if caminho_cred.exists():
             cred = credentials.Certificate(str(caminho_cred))
 
