@@ -4,7 +4,6 @@ import plotly.express as px
 from config.settings import (
     TIPOS_VAGA_MAP,
     PERIODO_HORAS_MAP,
-    DICIONARIO_SKILLS,
     LIMITE_VAGAS_PADRAO
 )
 from controllers.vaga_controller import VagaController
@@ -45,8 +44,7 @@ class DashboardView:
             )
         else:
             st.info(
-                "👆 Digite o **título da vaga** acima e clique em **Buscar Vagas no LinkedIn**, "
-                "ou selecione na barra lateral esquerda um cargo já analisado no Firebase."
+                "👆 Digite o **título da vaga** acima e clique em **Buscar Vagas no LinkedIn**"
             )
 
     # ==========================================================
@@ -65,9 +63,9 @@ class DashboardView:
 
             # Editor rápido de Skills do usuário para comparar com os requisitos da vaga
             st.markdown("#### 🛠️ Minhas Qualificações")
-            todas_skills = sorted(list(DICIONARIO_SKILLS.keys()))
+            todas_skills = self.vaga_controller.listar_opcoes_skills()
             skills_selecionadas = st.multiselect(
-                "Tecnologias que você domina:",
+                "Qualificações que você domina:",
                 options=todas_skills,
                 default=[s for s in usuario.skills_usuario if s in todas_skills]
             )
@@ -77,36 +75,9 @@ class DashboardView:
                     self.auth_controller.atualizar_skills_usuario(usuario.email, skills_selecionadas)
                     usuario.skills_usuario = skills_selecionadas
                     st.session_state["usuario_logado"] = usuario
-                    st.toast("Suas qualificações foram atualizadas!", icon="✅")
+                    st.toast("Suas qualificações foram atualizadas no Firebase!", icon="✅")
                     st.rerun()
 
-            st.divider()
-
-            # Seletor de cargos já salvos no Firebase (divididos por título da vaga)
-            st.markdown("#### 📂 Cargos Salvos no Banco")
-            try:
-                resumos_salvos = self.vaga_controller.listar_cargos_analisados()
-            except Exception:
-                resumos_salvos = []
-
-            if resumos_salvos:
-                opcoes_cargos = {
-                    f"{r.titulo_exibicao} ({r.total_vagas} vagas)": r.cargo_slug
-                    for r in resumos_salvos
-                }
-                cargo_escolhido_label = st.selectbox(
-                    "Alternar dashboard por título da vaga:",
-                    options=list(opcoes_cargos.keys())
-                )
-                if st.button("📊 Carregar Dashboard Salvo", use_container_width=True):
-                    slug = opcoes_cargos[cargo_escolhido_label]
-                    dados_banco = self.vaga_controller.carregar_cargo_do_banco(slug)
-                    if dados_banco["sucesso"]:
-                        st.session_state["resumo_atual"] = dados_banco["resumo"]
-                        st.session_state["vagas_atuais"] = dados_banco["vagas"]
-                        st.rerun()
-            else:
-                st.caption("Nenhum cargo analisado ainda. Faça sua primeira busca!")
 
     # ==========================================================
     # 2. FORMULÁRIO DE FILTROS DO LINKEDIN (SCRAPER)
@@ -181,16 +152,14 @@ class DashboardView:
             if resultado["sucesso"]:
                 st.session_state["resumo_atual"] = resultado["resumo"]
                 st.session_state["vagas_atuais"] = resultado["vagas"]
+                st.success(
+                    f"Encontradas {resultado['novas_coletadas']} vagas para '{resultado['resumo'].titulo_exibicao}'!"
+                )
 
-                if resultado.get("aviso"):
-                    st.warning(resultado["aviso"])
-                else:
-                    st.success(
-                        f"Varredura concluída! {resultado['novas_coletadas']} vagas processadas "
-                        f"e salvas para o cargo '{resultado['resumo'].titulo_exibicao}'."
-                    )
             else:
-                st.error(resultado["mensagem"])
+                st.session_state["resumo_atual"] = None
+                st.session_state["vagas_atuais"] = []
+                st.warning(resultado["mensagem"])
 
     # ==========================================================
     # 3. DASHBOARD DE INSIGHTS POR CARGO + LISTA DE VAGAS

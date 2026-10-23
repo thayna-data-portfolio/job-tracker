@@ -18,6 +18,11 @@ class VagaController:
         self.vaga_dao = VagaDAO()
         self.usuario_dao = UsuarioDAO()
 
+    def listar_opcoes_skills(self) -> List[str]:
+        """Retorna a lista de nomes de skills cadastradas no Firebase para o usuário escolher."""
+        catalogo = self.vaga_dao.obter_catalogo_skills()
+        return sorted(list(catalogo.keys()))
+
     def buscar_e_processar_vagas(
         self,
         termo_busca: str,
@@ -52,24 +57,27 @@ class VagaController:
         )
 
         if not resultado_scraper["sucesso"]:
-            # Se o LinkedIn limitou ou não achou vagas novas, tenta carregar o histórico salvo no banco
-            resumo_salvo = self.vaga_dao.buscar_resumo_cargo(cargo_slug)
-            vagas_salvas = self.vaga_dao.buscar_vagas_por_cargo(cargo_slug)
-            if resumo_salvo and vagas_salvas:
-                return {
-                    "sucesso": True,
-                    "aviso": f"{resultado_scraper['erro']} Exibindo dados já salvos no Firebase para este cargo.",
-                    "resumo": resumo_salvo,
-                    "vagas": vagas_salvas,
-                    "novas_coletadas": 0
-                }
-            return {"sucesso": False, "mensagem": resultado_scraper["erro"]}
+            return {
+                "sucesso": False,
+                "mensagem": "Não foram encontradas vagas no LinkedIn para os filtros selecionados."
+            }
+
+        catalogo_skills = self.vaga_dao.obter_catalogo_skills()
+
+        vagas_filtradas = self.extractor_service.processar_dataframe_vagas(
+            df=resultado_scraper["dataframe"],
+            termo_busca=termo_limpo,
+            catalogo_skills=catalogo_skills
+        )
+
+        if not vagas_filtradas:
+            return {
+                "sucesso": False,
+                "mensagem": f"Não foram encontradas vagas com o título '{termo_limpo}' para os filtros selecionados."
+            }
 
         # 2. Processa o DataFrame extraindo qualificações, dia a dia e salário
-        novas_vagas = self.extractor_service.processar_dataframe_vagas(
-            df=resultado_scraper["dataframe"],
-            termo_busca=termo_limpo
-        )
+        novas_vagas = vagas_filtradas
 
         # 3. Salva as vagas em lote no Firestore (fazendo merge por id_vaga)
         self.vaga_dao.salvar_vagas_em_lote(novas_vagas)
@@ -83,9 +91,6 @@ class VagaController:
         )
         self.vaga_dao.salvar_resumo_cargo(resumo_atualizado)
 
-        # 5. Registra a pesquisa no histórico do usuário logado
-        if email_usuario:
-            self.usuario_dao.registrar_busca_no_historico(email_usuario, cargo_slug)
 
         return {
             "sucesso": True,

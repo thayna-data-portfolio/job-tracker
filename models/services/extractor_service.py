@@ -1,9 +1,9 @@
 import re
 import unicodedata
 from collections import Counter
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 import pandas as pd
-from config.settings import DICIONARIO_SKILLS
+
 from models.entities.vaga import Vaga
 from models.entities.resumo_cargo import ResumoCargo
 
@@ -15,26 +15,77 @@ class ExtractorService:
     """
 
     @staticmethod
+    def remover_acentos(texto: str) -> str:
+        nfkd = unicodedata.normalize("NFKD", texto.strip().lower())
+        return "".join(c for c in nfkd if not unicodedata.combining(c))
+    
+    @staticmethod
     def gerar_slug_cargo(titulo_cargo: str) -> str:
         """
         Normaliza o título buscado para servir de chave agrupadora no Firestore.
         Ex: 'Desenvolvedor Python Júnior' -> 'desenvolvedor-python-junior'
         """
         texto = unicodedata.normalize("NFKD", titulo_cargo.strip().lower())
-        texto_sem_acento = "".join(c for c in texto if not unicodedata.combining(c))
+        texto_sem_acento = "".join(
+            c for c in texto if not unicodedata.combining(c)
+        )
         slug = re.sub(r"[^a-z0-9]+", "-", texto_sem_acento).strip("-")
         return slug or "cargo-geral"
 
+    @classmethod
+    def _vaga_pertence_ao_cargo_buscado(cls, titulo_vaga: str, termo_busca: str) -> bool:
+        """
+        Garante que o TÍTULO da vaga retornada pelo LinkedIn realmente corresponda
+        ao nível (ex: estágio) e à área que o usuário pesquisou.
+        """
+        titulo_norm = cls.remover_acentos(titulo_vaga)
+        busca_norm = cls.remover_acentos(termo_busca)
+
+        sinonimos_estagio = ("estagio", "estagiario", "estagiaria", "intern", "internship")
+        cargos_superiores = ("pleno", "senior", "sr", "coordenador", "gerente", "especialista", "lead", "tech lead")
+
+        busca_pede_estagio = any(s in busca_norm for s in sinonimos_estagio)
+
+        # 1. Se o usuário buscou por Estágio, barra vagas de Pleno/Sênior ou que não sejam de estágio
+        if busca_pede_estagio:
+            if any(re.search(rf"\b{c}\b", titulo_norm) for c in cargos_superiores):
+                return False
+            if not any(s in titulo_norm for s in sinonimos_estagio):
+                return False
+
+        # 2. Verifica se as palavras-chave da área buscada estão no TÍTULO da vaga
+        stopwords = {
+            "de", "em", "da", "do", "para", "com", "na", "no", "e", "ou",
+            "vaga", "pessoa", "estagio", "estagiario", "estagiaria", "junior", "jr", "pleno", "senior"
+        }
+        palavras_area = [p for p in re.findall(r"[a-z0-9]+", busca_norm) if p not in stopwords and len(p) > 2]
+
+        # Mapa de equivalência para títulos (ex: buscar "Direito" aceita "Jurídico" no título)
+        equivalencias_area = {
+            "direito": ["direito", "juridico", "juridica", "advogado", "advocacia", "civel", "trabalhista", "contencioso", "contratos"],
+            "dados": ["dados", "data", "bi", "analytics", "business intelligence", "estatistica"],
+            "ti": ["ti", "tecnologia", "suporte", "infraestrutura", "sistemas", "software", "desenvolvedor", "dev"],
+            "marketing": ["marketing", "comunicacao", "midias", "social media", "conteudo", "growth"]
+        }
+
+        for palavra in palavras_area:
+            termos_aceitos = equivalencias_area.get(palavra, [palavra])
+            if not any(t in titulo_norm for t in termos_aceitos):
+                return False
+
+        return True
+
+
     @staticmethod
-    def extrair_requisitos(descricao: str) -> List[str]:
-        """Identifica quais qualificações do catálogo estão presentes na descrição da vaga."""
+    def extrair_requisitos(descricao: str, catalogo_skills: Dict[str, List[str]]) -> List[str]:
+        """Identifica quais qualificações do catálogo Firebase estão presentes na descrição da vaga."""
         if not descricao or not isinstance(descricao, str):
             return []
 
         texto_lower = descricao.lower()
         skills_encontradas = []
 
-        for nome_skill, padroes in DICIONARIO_SKILLS.items():
+        for nome_skill, padroes in catalogo_skills.items():
             for padrao in padroes:
                 if padrao.startswith(r"\b"):
                     if re.search(padrao, texto_lower):
@@ -126,13 +177,21 @@ class ExtractorService:
     def processar_dataframe_vagas(
         self,
         df: pd.DataFrame,
-        termo_busca: str
+        termo_busca: str,
+        catalogo_skills: Optional[Dict[str, List[str]]] = None
     ) -> List[Vaga]:
         """Converte cada linha do DataFrame do JobSpy em um objeto Vaga enriquecido."""
         cargo_slug = self.gerar_slug_cargo(termo_busca)
         vagas_processadas: List[Vaga] = []
 
         for _, row in df.iterrows():
+            titulo_vaga = str(row.get("title") or "").strip()
+            if not titulo_vaga:
+                continue
+
+            #Barra vagas fora do tema/nível pesquisado
+            if not self._vaga_pertence_ao_cargo_buscado(titulo_vaga, termo_busca):
+                continue
             id_bruto = row.get("id") or row.get("job_url") or ""
             id_limpo = re.sub(r"[^a-zA-Z0-9_-]", "_", str(id_bruto))
             descricao = str(row.get("description") or "")
@@ -161,7 +220,7 @@ class ExtractorService:
                 nivel_experiencia=str(row.get("job_level") or "Não informado"),
                 salario=self.extrair_salario(row, descricao),
                 link_inscricao=link,
-                requisitos=self.extrair_requisitos(descricao),
+                requisitos=self.extrair_requisitos(descricao,catalogo_skills or {}),
                 dia_a_dia=self.extrair_dia_a_dia(descricao),
                 descricao_bruta=descricao,
                 data_publicacao=str(row.get("date_posted") or ""),
